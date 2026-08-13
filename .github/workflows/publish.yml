@@ -1,0 +1,29 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  # Lets the job mint an OIDC token for npm trusted publishing — no NPM_TOKEN
+  # secret exists, so without this the publish step cannot authenticate at all.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 24 usually ships newer.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # prepack rebuilds dist/; provenance is attached automatically because the
+      # repo and the package are both public.
+      - run: npm publish
