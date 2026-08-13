@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# Persisted identity: party key + desk API key. Never commit.
+.cessio/
+.env
