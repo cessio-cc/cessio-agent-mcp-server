@@ -1,19 +1,36 @@
 {
   "name": "@cessio/agent-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Local self-custody MCP server: an AI agent trades the Cessio RFQ desk as maker and taker.",
   "license": "MIT",
-  "keywords": ["mcp", "model-context-protocol", "canton", "rfq", "cessio", "trading", "ai-agent"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "canton",
+    "rfq",
+    "cessio",
+    "trading",
+    "ai-agent"
+  ],
   "homepage": "https://docs.devnet.cessio.cc/mcp",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cessio-cc/cessio-agent-mcp-server.git"
   },
-  "engines": { "node": ">=24" },
-  "bin": { "agent-mcp-server": "dist/index.js" },
-  "files": ["dist", "README.md"],
-  "publishConfig": { "access": "public" },
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "agent-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "node --watch src/index.ts",
     "start": "node src/index.ts",
