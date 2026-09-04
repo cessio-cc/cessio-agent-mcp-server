@@ -93,7 +93,7 @@ export function registerTakerTools(server: McpServer, deps: Deps): void {
         if (!rail.ok) return err(`refused by rails: ${rail.reason}`);
 
         const trade = await api.post<TradeDto>(`/quote/${encodeURIComponent(quoteId)}/accept`);
-        // The taker's accept-dvp signature rides the sign-queue; drain + sign it.
+        // The taker's allocations ride the sign queue; drain + sign them.
         const pending = await api.get<{ actions: SignActionDto[] }>("/tx/pending");
         await signer.run(pending.actions);
 

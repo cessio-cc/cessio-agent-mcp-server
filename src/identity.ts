@@ -6,7 +6,6 @@ import {
   type Api,
   type MakerRegisterCompleteResponse,
   type MakerRegisterStartResponse,
-  type SignActionDto,
 } from "./client.ts";
 
 /** What survives restarts. The party key never leaves this file. `apiKey` (and
@@ -82,13 +81,9 @@ export async function recoverApiKey(api: Api, stateFile: string): Promise<Identi
 }
 
 /** Self-serve registration (openapi /maker/register/*): generate the party
- * key, sign the topology hashes, persist the identity, and hand back the
- * settlement-service activation actions for the caller to sign. */
-export async function register(
-  api: Api,
-  displayName: string,
-  stateFile: string,
-): Promise<{ identity: Identity; actions: SignActionDto[] }> {
+ * key, sign the topology hashes, persist the identity. Nothing else is needed
+ * to trade on the token standard. */
+export async function register(api: Api, displayName: string, stateFile: string): Promise<Identity> {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const spki = publicKey.export({ type: "spki", format: "der" });
   const publicKeyB64 = Buffer.from(spki.subarray(spki.length - 32)).toString("base64");
@@ -111,5 +106,5 @@ export async function register(
 
   const stored: StoredIdentity = { partyId: complete.partyId, hint: complete.hint, apiKey: complete.apiKey, privateKeyPem };
   save(stateFile, stored);
-  return { identity: toIdentity(stored), actions: complete.actions };
+  return toIdentity(stored);
 }

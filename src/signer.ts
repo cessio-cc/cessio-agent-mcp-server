@@ -6,8 +6,8 @@ export interface Signer {
 }
 
 /** Signs prepared-tx hashes and submits them via POST /tx/execute. Shared by
- * every tool that produces sign actions (maker quote pair, taker accept,
- * activation). Keeps a set of already-signed ids so a re-drain of /tx/pending
+ * every tool that produces sign actions (the maker's quote allocations, the
+ * taker's accept allocations). Keeps a set of already-signed ids so a re-drain of /tx/pending
  * does not double-submit. A transport failure or retryable per-action error
  * releases the id so a later run re-signs it. */
 export function makeSigner(api: Api, identity: Identity, log: (m: string) => void): Signer {

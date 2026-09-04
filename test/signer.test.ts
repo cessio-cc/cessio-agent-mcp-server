@@ -4,7 +4,7 @@ import type { Identity } from "../src/identity.ts";
 import { makeSigner } from "../src/signer.ts";
 
 const idn = { partyId: "p", hint: "agent", apiKey: "mk_", signHash: (h: string) => `sig(${h})`, signText: () => "t" } as Identity;
-const action = (id: string, purpose = "propose-dvp"): SignActionDto => ({ id, purpose, description: id, hash: `hash-${id}` });
+const action = (id: string, purpose: SignActionDto["purpose"] = "allocate"): SignActionDto => ({ id, purpose, description: id, hash: `hash-${id}` });
 
 function apiStub(post: Api["post"]): Api {
   return { get: vi.fn(), post, del: vi.fn(), streamOptions: () => ({ url: "ws://x", headers: {} }) };

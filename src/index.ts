@@ -20,17 +20,15 @@ async function main(): Promise<void> {
     log("identity has no API key — recovering via challenge + rotate");
     identity = await recoverApiKey(api, cfg.stateFile);
   }
-  let initialActions: SignActionDto[] = [];
   if (identity === undefined) {
     log(`no identity at ${cfg.stateFile} — registering "${cfg.displayName}" at ${cfg.apiUrl}`);
-    ({ identity, actions: initialActions } = await register(api, cfg.displayName, cfg.stateFile));
+    identity = await register(api, cfg.displayName, cfg.stateFile);
     log(`registered as ${identity.hint} (${identity.partyId})`);
   }
   const id = identity;
   const signer = makeSigner(api, id, log);
 
-  // Sign registration/activation actions, then drain anything parked in the queue.
-  await signer.run(initialActions).catch((e) => log(`initial sign failed (will retry via /tx/pending): ${String(e)}`));
+  // Drain anything parked in the sign queue while we were down.
   try {
     const pending = await api.get<{ actions: SignActionDto[] }>("/tx/pending");
     await signer.run(pending.actions);

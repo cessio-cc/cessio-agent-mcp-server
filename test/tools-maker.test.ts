@@ -34,8 +34,8 @@ test("wait_for_rfq reports no RFQ on timeout", async () => {
   expect(res.content[0].text).toMatch(/no rfq/i);
 });
 
-test("submit_quote rail-checks, posts the quote and signs the returned pair", async () => {
-  const actions = [{ id: "a1", purpose: "propose-dvp", description: "swap", hash: "h1" }];
+test("submit_quote rail-checks, posts the quote and signs the returned allocations", async () => {
+  const actions = [{ id: "a1", purpose: "allocate", description: "swap", hash: "h1" }];
   const post = vi.fn(async () => ({ quoteId: "q1", rfqId: "r1", price: "50000", status: "pending", actions }));
   const api = { get: vi.fn(async () => ({ price: "50000" })), post };
   const { handlers, signer } = harness({ api: api as Partial<Api>, stream: { get: () => rfq } });

@@ -27,10 +27,8 @@ beforeAll(async () => {
   const cfg = { ...loadConfig({ RFQ_BASE_URL: BASE, AGENT_STATE_FILE: stateFile, AGENT_MAX_NOTIONAL: "100000000" }) };
   let identity: Identity | undefined;
   const api = makeApi(cfg.apiUrl, () => identity?.apiKey ?? "");
-  const reg = await register(api, `agent-int-${Date.now()}`, stateFile);
-  identity = reg.identity;
+  identity = await register(api, `agent-int-${Date.now()}`, stateFile);
   const signer = makeSigner(api, identity, () => {});
-  await signer.run(reg.actions);
   const pending = await api.get<{ actions: SignActionDto[] }>("/tx/pending");
   await signer.run(pending.actions);
   // Faucet the fresh agent so it can settle.
@@ -126,15 +124,6 @@ test("live accept→settle: agent sells to the demo maker, swap settles atomical
   });
   expect(quoted.status).toBe(200);
   const quoteId = (await quoted.json() as { quoteId: string }).quoteId;
-
-  // The operator's sweep must first accept the agent's UserService activation.
-  const actDeadline = Date.now() + 60_000;
-  for (;;) {
-    const status = await deps.api.get<{ serviceActivated: boolean }>("/maker/status");
-    if (status.serviceActivated) break;
-    if (Date.now() > actDeadline) throw new Error("agent UserService not activated within 60s");
-    await new Promise((r) => setTimeout(r, 1500));
-  }
 
   // Accept (the same POST accept_quote issues), then keep draining /tx/pending
   // through the MCP signer until the trade leaves "settling" — the runtime's

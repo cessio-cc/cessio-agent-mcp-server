@@ -8,7 +8,7 @@ export function registerInfoTools(server: McpServer, deps: Deps): void {
 
   server.registerTool(
     "get_status",
-    { title: "Get agent status", description: "This agent's party hint, activation state, and pending sign actions.", inputSchema: {} },
+    { title: "Get agent status", description: "This agent's party hint, whether takers can invite it, and its pending sign actions.", inputSchema: {} },
     async () => {
       try {
         return ok(await api.get<MakerStatusResponse>("/maker/status"));

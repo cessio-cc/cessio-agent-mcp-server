@@ -7,7 +7,9 @@ export type Direction = "BUY" | "SELL";
 /** base64 bytes of a Canton prepared-transaction hash — sign the RAW bytes. */
 export interface SignActionDto {
   id: string;
-  purpose: string;
+  /** `allocate`: a token-standard v2 allocation (a quote or accept leg);
+   * `transfer-accept`: a deposit; `transfer-out`: a withdrawal. */
+  purpose: "allocate" | "transfer-accept" | "transfer-out";
   description: string;
   hash: string;
 }
@@ -82,7 +84,8 @@ export interface MakerQuoteResponse {
   rfqId: string;
   price: string;
   status: QuoteDto["status"];
-  /** The DvpProposal pair (fee + swap) to sign; invisible to the taker until both are. */
+  /** The maker's token-standard v2 allocations to sign, one per instrument
+   * the quote touches; the taker sees nothing until every one has landed. */
   actions: SignActionDto[];
 }
 
@@ -94,7 +97,6 @@ export interface MakerStatusResponse {
   partyId: string;
   hint: string;
   invitable: boolean;
-  serviceActivated: boolean;
   pendingActions: number;
 }
 
@@ -108,7 +110,6 @@ export interface MakerRegisterCompleteResponse {
   partyId: string;
   hint: string;
   apiKey: string;
-  actions: SignActionDto[];
 }
 
 export interface ReferencePrice {
