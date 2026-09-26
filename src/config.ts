@@ -34,9 +34,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AgentConfig {
     stateFile: env.AGENT_STATE_FILE ?? join(homedir(), ".cessio", "agent-identity.json"),
     displayName: env.AGENT_DISPLAY_NAME ?? "agent",
     maxNotional,
+    // Catalog symbols, compared case-insensitively: "cBTC" and "cbtc" are the same.
     instrumentWhitelist: (env.AGENT_INSTRUMENT_WHITELIST ?? "")
       .split(",")
-      .map((s) => s.trim())
+      .map((s) => s.trim().toLowerCase())
       .filter((s) => s !== ""),
     maxPriceDeviationBps: num(env, "AGENT_MAX_PRICE_DEVIATION_BPS", 500),
     settleTimeoutMs: num(env, "AGENT_SETTLE_TIMEOUT_MS", 60_000),

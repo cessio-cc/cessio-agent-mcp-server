@@ -27,7 +27,7 @@ test("parses overrides", () => {
   expect(c.apiUrl).toBe("https://desk.example");
   expect(c.displayName).toBe("quant-1");
   expect(c.maxNotional).toBe(5000);
-  expect(c.instrumentWhitelist).toEqual(["cBTC", "USDC", "cETH"]);
+  expect(c.instrumentWhitelist).toEqual(["cbtc", "usdc", "ceth"]); // symbols compare case-insensitively
   expect(c.maxPriceDeviationBps).toBe(250);
   expect(c.settleTimeoutMs).toBe(30_000);
   expect(c.pollMs).toBe(1_000);

@@ -21,6 +21,10 @@ test("refuses an instrument off the whitelist", () => {
   if (!r.ok) expect(r.reason).toMatch(/cETH/);
 });
 
+test("the whitelist ignores case — display and catalog symbols are the same instrument", () => {
+  expect(checkRails({ ...intent, base: "cbtc", quote: "usdc" }, "50000", rails)).toEqual({ ok: true });
+});
+
 test("refuses over the notional ceiling", () => {
   const r = checkRails({ ...intent, qty: "0.1" }, "50000", rails); // notional 5000
   expect(r).toMatchObject({ ok: false });

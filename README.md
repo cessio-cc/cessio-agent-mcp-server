@@ -37,7 +37,7 @@ RFQ_BASE_URL=https://<desk>            # desk REST/WS base (default http://local
 AGENT_STATE_FILE=~/.cessio/agent-identity.json
 AGENT_DISPLAY_NAME="my-agent"
 AGENT_MAX_NOTIONAL=5000                # required to trade; unset = read-only
-AGENT_INSTRUMENT_WHITELIST=cBTC,USDC   # empty = all
+AGENT_INSTRUMENT_WHITELIST=cbtc,usdcx  # catalog symbols, any case; empty = all
 AGENT_MAX_PRICE_DEVIATION_BPS=500
 AGENT_SETTLE_TIMEOUT_MS=60000          # how long accept_quote waits for the outcome
 ```

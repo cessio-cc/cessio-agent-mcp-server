@@ -22,8 +22,9 @@ export function checkRails(intent: TradeIntent, referenceMid: string | null, rai
   }
   const { instrumentWhitelist: wl } = rails;
   if (wl.length > 0) {
-    if (!wl.includes(intent.base)) return { ok: false, reason: `instrument ${intent.base} is not on AGENT_INSTRUMENT_WHITELIST` };
-    if (!wl.includes(intent.quote)) return { ok: false, reason: `instrument ${intent.quote} is not on AGENT_INSTRUMENT_WHITELIST` };
+    const listed = (symbol: string): boolean => wl.some((s) => s.toLowerCase() === symbol.toLowerCase());
+    if (!listed(intent.base)) return { ok: false, reason: `instrument ${intent.base} is not on AGENT_INSTRUMENT_WHITELIST` };
+    if (!listed(intent.quote)) return { ok: false, reason: `instrument ${intent.quote} is not on AGENT_INSTRUMENT_WHITELIST` };
   }
   const qty = Number(intent.qty);
   const price = Number(intent.price);
