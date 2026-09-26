@@ -78,7 +78,7 @@ export function registerTakerTools(server: McpServer, deps: Deps): void {
     {
       title: "Accept a quote",
       description:
-        "Accept a maker's quote on your RFQ. Signs your side of the settlement and waits for the outcome: the settled trade with its on-ledger proof, or the reason the desk failed it (nothing moves on a failure; the RFQ stays open).",
+        "Accept a maker's quote on your RFQ. Signs your side of the settlement and waits for the outcome: the settled trade with its on-ledger proof, or the reason the desk failed it (nothing moves on a failure; the RFQ stays open until its deadline).",
       inputSchema: { quoteId: z.string() },
     },
     async ({ quoteId }) => {
@@ -106,7 +106,7 @@ export function registerTakerTools(server: McpServer, deps: Deps): void {
           api, { tradeId: trade.tradeId, rfqId: rfq.rfqId, priorFailures }, cfg.settleTimeoutMs, cfg.pollMs, drain,
         );
         if (outcome.settled) return ok(outcome.trade);
-        if (outcome.failure !== undefined) return err(`settlement failed: ${outcome.failure} — nothing moved, the RFQ is still open`);
+        if (outcome.failure !== undefined) return err(`settlement failed: ${outcome.failure} — nothing moved; the RFQ stays open until its deadline`);
         const { actions: _signed, ...settling } = trade;
         return ok({ ...(outcome.trade ?? settling), note: "still settling — check list_trades" });
       } catch (e) {

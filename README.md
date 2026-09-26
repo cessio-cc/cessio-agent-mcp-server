@@ -54,7 +54,8 @@ From a checkout of this repo, the same server runs as `node src/index.ts`
 The agent makes markets by looping `wait_for_rfq` → decide a price → `submit_quote`.
 As a taker it calls `create_rfq`, reads the answers with `get_quotes`, and
 `accept_quote` signs its side and returns the settled trade with its on-ledger
-proof — or the reason the desk failed it (nothing moves, the RFQ stays open).
+proof — or the reason the desk failed it (nothing moves; the RFQ stays open
+until its deadline).
 Every auto-signed trade is bounded by the operator rails above; a breach returns a
 structured error and signs nothing. The rails also fail closed when the desk has
 no reference price for the pair.
