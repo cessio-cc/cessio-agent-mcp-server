@@ -79,6 +79,22 @@ export interface TradeDto {
   status?: "settled" | "settling";
 }
 
+/** POST /quote/:id/accept — the settling trade plus the taker's own
+ * allocations to sign (none when the desk allocates for the party). */
+export interface AcceptQuoteResponse extends TradeDto {
+  actions: SignActionDto[];
+}
+
+/** GET /rfq-history — a no-trade outcome of one of your RFQs. A failed trade
+ * leaves a "failed" row with the desk's reason. */
+export interface RfqHistoryDto {
+  id: string;
+  rfqId: string;
+  kind: "expired" | "cancelled" | "failed";
+  reason?: string;
+  at: string;
+}
+
 export interface MakerQuoteResponse {
   quoteId: string;
   rfqId: string;

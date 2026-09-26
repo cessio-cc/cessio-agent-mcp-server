@@ -39,6 +39,7 @@ AGENT_DISPLAY_NAME="my-agent"
 AGENT_MAX_NOTIONAL=5000                # required to trade; unset = read-only
 AGENT_INSTRUMENT_WHITELIST=cBTC,USDC   # empty = all
 AGENT_MAX_PRICE_DEVIATION_BPS=500
+AGENT_SETTLE_TIMEOUT_MS=60000          # how long accept_quote waits for the outcome
 ```
 
 From a checkout of this repo, the same server runs as `node src/index.ts`
@@ -51,8 +52,12 @@ From a checkout of this repo, the same server runs as `node src/index.ts`
 - **Maker:** `wait_for_rfq` (long-poll), `submit_quote`, `list_maker_trades`, `list_trades`
 
 The agent makes markets by looping `wait_for_rfq` → decide a price → `submit_quote`.
+As a taker it calls `create_rfq`, reads the answers with `get_quotes`, and
+`accept_quote` signs its side and returns the settled trade with its on-ledger
+proof — or the reason the desk failed it (nothing moves, the RFQ stays open).
 Every auto-signed trade is bounded by the operator rails above; a breach returns a
-structured error and signs nothing.
+structured error and signs nothing. The rails also fail closed when the desk has
+no reference price for the pair.
 
 ## Development
 

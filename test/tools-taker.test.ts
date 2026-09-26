@@ -38,3 +38,45 @@ test("accept_quote refuses when a rail is breached and signs nothing", async () 
   expect(res.content[0].text).toMatch(/notional/i);
   expect(signer.run).not.toHaveBeenCalled();
 });
+
+test("accept_quote signs the actions the accept returned and returns the settled trade", async () => {
+  const signer = { run: vi.fn(async () => {}) };
+  const rfqMine = [{ rfqId: "r1", base: "cbtc", quote: "usdcx", qty: "1", direction: "SELL", quotes: [{ quoteId: "q1", price: "50000", rfqId: "r1" }] }];
+  const settled = { tradeId: "q1", settledAt: "2026-07-26T00:00:00Z", ledger: { updateId: "u1", receiptCids: [] } };
+  const actions = [{ id: "a1", kind: "hash", hash: "aGFzaA==", purpose: "allocate" }];
+  const get = vi.fn(async (p: string) => {
+    if (p.startsWith("/rfq/mine")) return rfqMine;
+    if (p.startsWith("/maker/reference-price")) return { price: "50000" };
+    if (p.startsWith("/rfq-history")) return [];
+    if (p.startsWith("/tx/pending")) return { actions: [] };
+    if (p.startsWith("/trades")) return [settled];
+    throw new Error(`unexpected GET ${p}`);
+  });
+  const post = vi.fn(async () => ({ tradeId: "q1", status: "settling", settledAt: "", actions }));
+  const h = harness({ get, post } as unknown as Partial<Api>, { signer });
+  const res = await h.get("accept_quote")!({ quoteId: "q1" });
+  expect(res.isError).toBeFalsy();
+  expect(signer.run).toHaveBeenCalledWith(actions);
+  expect(JSON.parse(res.content[0].text)).toMatchObject({ tradeId: "q1", ledger: { updateId: "u1" } });
+});
+
+test("accept_quote reports the desk's reason when the settlement fails", async () => {
+  const rfqMine = [{ rfqId: "r1", base: "cbtc", quote: "usdcx", qty: "1", direction: "SELL", quotes: [{ quoteId: "q1", price: "50000", rfqId: "r1" }] }];
+  let historyReads = 0;
+  const get = vi.fn(async (p: string) => {
+    if (p.startsWith("/rfq/mine")) return rfqMine;
+    if (p.startsWith("/maker/reference-price")) return { price: "50000" };
+    if (p.startsWith("/rfq-history")) {
+      historyReads += 1; // the first read is the pre-accept snapshot
+      return historyReads === 1 ? [] : [{ id: "h1", rfqId: "r1", kind: "failed", reason: "the settlement window expired", at: "x" }];
+    }
+    if (p.startsWith("/tx/pending")) return { actions: [] };
+    if (p.startsWith("/trades")) return [];
+    throw new Error(`unexpected GET ${p}`);
+  });
+  const post = vi.fn(async () => ({ tradeId: "q1", status: "settling", settledAt: "", actions: [] }));
+  const h = harness({ get, post } as unknown as Partial<Api>);
+  const res = await h.get("accept_quote")!({ quoteId: "q1" });
+  expect(res.isError).toBe(true);
+  expect(res.content[0].text).toMatch(/settlement window expired/);
+});

@@ -60,90 +60,104 @@ test("taker cycle: create_rfq is visible in list_my_rfqs", async () => {
   expect(mine.content[0].text).toContain(rfqId);
 });
 
-/** The full live cycle the unit suite can't cover: a freshly-registered agent
- * party SELLs to the sandbox demo maker and the swap settles atomically
- * on-ledger, with every taker-side signature going through the MCP signer.
- * The accept itself is the same POST the accept_quote tool issues; only the
- * checkRails gate is bypassed — the sandbox has no price oracle (COINGECKO
- * key unset -> referencePrice null -> fail-closed refusal by design), and
- * rails are a pure function with its own unit coverage. */
-test("live accept→settle: agent sells to the demo maker, swap settles atomically", async () => {
-  const { registerTakerTools } = await import("../src/tools/taker.ts");
-  const h = collect(registerTakerTools as never, deps);
-
-  // Fund the agent directly (sandbox MockRegistry mint, operator actAs) — the
-  // faucet is DevNet-only. Party ids come from the ledger's own party list.
-  const parties = await (await fetch("http://localhost:6864/v2/parties")).json() as { partyDetails?: Array<{ party: string }> } | Array<{ party: string }>;
-  const list = Array.isArray(parties) ? parties : parties.partyDetails ?? [];
-  const operator = list.map((p) => p.party).find((p) => p.startsWith("operator::"))!;
+/** The rail's admin offers `amount` of `id` to `owner` on the local sandbox —
+ * a deposit, as any token-standard sender would make one. Raw JSON Ledger API
+ * as the operator (house party, the node signs for it). */
+const LEDGER = process.env.LEDGER_JSON_API_URL ?? "http://localhost:6864";
+const TOKEN_RULES = "#splice-test-token-v2:Splice.Testing.Tokens.TestTokenV2:TokenRules";
+async function ledgerPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${LEDGER}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  expect(res.status, `${path}: ${res.status}`).toBe(200);
+  return (await res.json()) as T;
+}
+async function offerMint(owner: string, id: string, amount: string): Promise<void> {
+  const parties = (await (await fetch(`${LEDGER}/v2/parties`)).json()) as { partyDetails?: Array<{ party: string }> };
+  const operator = (parties.partyDetails ?? []).map((p) => p.party).find((p) => p.startsWith("operator::"))!;
   expect(operator).toBeDefined();
-  const mint = await fetch("http://localhost:6864/v2/commands/submit-and-wait-for-transaction", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      commands: {
-        commands: [
-          {
-            CreateCommand: {
-              templateId: "#rfq-desk:MockRegistry:MockHolding",
-              createArguments: {
-                admin: operator,
-                owner: deps.identity.partyId,
-                instrumentId: { admin: operator, id: "CBTC" },
-                amount: "1.0",
-              },
+  const { offset } = (await (await fetch(`${LEDGER}/v2/state/ledger-end`)).json()) as { offset: number };
+  const acs = await ledgerPost<Array<{ contractEntry: { JsActiveContract?: { createdEvent: { contractId: string } } } }>>(
+    "/v2/state/active-contracts",
+    {
+      filter: { filtersByParty: { [operator]: { cumulative: [{ identifierFilter: { TemplateFilter: { value: { templateId: TOKEN_RULES, includeCreatedEventBlob: false } } } }] } } },
+      verbose: false,
+      activeAtOffset: offset,
+    },
+  );
+  const rulesCid = acs.map((e) => e.contractEntry.JsActiveContract?.createdEvent.contractId).find((c) => c !== undefined)!;
+  const account = { owner, provider: null, id: "" };
+  await ledgerPost("/v2/commands/submit-and-wait", {
+    commands: [
+      {
+        ExerciseCommand: {
+          templateId: TOKEN_RULES,
+          contractId: rulesCid,
+          choice: "TokenRules_OfferMint",
+          choiceArgument: {
+            receiver: account,
+            amount,
+            instrumentId: { admin: operator, id },
+            offeredAt: new Date(Date.now() - 60_000).toISOString(),
+            receiverConfig: {
+              admin: operator,
+              account,
+              ownerConfig: { canInitiate: true, mustApprove: true },
+              providerConfig: { canInitiate: false, mustApprove: false },
             },
           },
-        ],
-        commandId: `agent-int-fund-${Date.now()}`,
-        userId: "participant_admin",
-        actAs: [operator],
-        readAs: [],
-      },
-      transactionFormat: {
-        eventFormat: {
-          filtersByParty: { [operator]: { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] } },
-          verbose: false,
         },
-        transactionShape: "TRANSACTION_SHAPE_ACS_DELTA",
       },
-    }),
+    ],
+    commandId: `agent-int-fund-${Date.now()}`,
+    userId: "participant_admin",
+    actAs: [operator],
+    readAs: [],
   });
-  expect(mint.status).toBe(200);
+}
 
-  // The agent asks the demo maker for a price.
-  const created = await h.get("create_rfq")!({ direction: "SELL", base: "cbtc", quote: "usdcx", qty: "0.001", durationMinutes: 5, makers: ["makerA"] });
+/** The full live cycle the unit suite can't cover, through the real tools: a
+ * freshly-registered agent party takes a deposit through the desk's inbox,
+ * SELLs to the sandbox demo maker with accept_quote, and the swap settles
+ * atomically on-ledger — every agent signature through the MCP signer. The
+ * sandbox has no price oracle, so the reference-price read is answered here
+ * to let the rails pass (they fail closed without one, by design). */
+test("live accept_quote: agent sells to the demo maker, the tool returns the settled trade", async () => {
+  const { registerTakerTools } = await import("../src/tools/taker.ts");
+  const api = {
+    ...deps.api,
+    get: <T,>(path: string): Promise<T> =>
+      path.startsWith("/maker/reference-price") ? Promise.resolve({ price: "60000.0" } as T) : deps.api.get<T>(path),
+  };
+  const h = collect(registerTakerTools as never, { ...deps, api });
+
+  // Fund: the deposit waits in the inbox; accepting it hands back one action to sign.
+  await offerMint(deps.identity.partyId, "CBTC", "1.0");
+  let cid: string | undefined;
+  for (let i = 0; i < 60 && cid === undefined; i++) {
+    const { transfers } = await deps.api.get<{ transfers: Array<{ cid: string }> }>("/wallet/incoming");
+    cid = transfers[0]?.cid;
+    if (cid === undefined) await new Promise((r) => setTimeout(r, 500));
+  }
+  expect(cid, "the deposit never reached /wallet/incoming").toBeDefined();
+  const { actions } = await deps.api.post<{ actions: SignActionDto[] }>(`/wallet/incoming/${cid}/accept`);
+  await deps.signer.run(actions);
+
+  // The agent asks the demo maker for a price; the maker quotes via the Maker API.
+  const created = await h.get("create_rfq")!({ direction: "SELL", base: "cBTC", quote: "USDCx", qty: "0.001", durationMinutes: 5, makers: ["makerA"] });
   expect(created.isError).toBeFalsy();
   const rfqId = JSON.parse(created.content[0].text).rfqId as string;
-
-  // The live counterparty quotes via the Maker API (sandbox demo key).
   const quoted = await fetch(`${BASE}/maker/quotes`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": "demo-key-a" },
-    body: JSON.stringify({ rfqId, price: "60000.0", validUntil: new Date(Date.now() + 4 * 60_000).toISOString() }),
+    body: JSON.stringify({ rfqId, price: "60000.0" }),
   });
   expect(quoted.status).toBe(200);
-  const quoteId = (await quoted.json() as { quoteId: string }).quoteId;
+  const quoteId = ((await quoted.json()) as { quoteId: string }).quoteId;
 
-  // Accept (the same POST accept_quote issues), then keep draining /tx/pending
-  // through the MCP signer until the trade leaves "settling" — the runtime's
-  // stream-driven signer loop, compressed into a poll.
-  const trade = await deps.api.post<{ tradeId: string; status?: string }>(`/quote/${encodeURIComponent(quoteId)}/accept`);
-  const deadline = Date.now() + 90_000;
-  let settled: { tradeId: string; status?: string; settledAt: string; qty: string } | undefined;
-  for (;;) {
-    const pending = await deps.api.get<{ actions: SignActionDto[] }>("/tx/pending");
-    await deps.signer.run(pending.actions);
-    const trades = await deps.api.get<Array<{ tradeId: string; status?: string; settledAt: string; qty: string }>>("/trades?limit=100");
-    const t = trades.find((x) => x.tradeId === trade.tradeId);
-    if (t !== undefined && t.status !== "settling") {
-      settled = t;
-      break;
-    }
-    if (Date.now() > deadline) break;
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-  expect(settled, "trade did not settle within 90s").toBeDefined();
-  expect(settled!.settledAt).not.toBe("");
-  expect(settled!.qty).toBe("0.001");
+  const res = await h.get("accept_quote")!({ quoteId });
+  expect(res.isError, res.content[0].text).toBeFalsy();
+  const trade = JSON.parse(res.content[0].text) as { tradeId: string; qty: string; settledAt: string; ledger?: { updateId: string } };
+  expect(trade.tradeId).toBe(quoteId);
+  expect(trade.qty).toBe("0.001");
+  expect(trade.settledAt).not.toBe("");
+  expect(trade.ledger?.updateId).toBeTruthy();
 }, 150_000);

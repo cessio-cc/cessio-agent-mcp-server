@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { DeskDto, RfqWithQuotesDto, SignActionDto, TradeDto } from "../client.ts";
+import type { AcceptQuoteResponse, DeskDto, RfqWithQuotesDto, SignActionDto } from "../client.ts";
 import { checkRails } from "../guards.ts";
-import { pollSettlement } from "../settle.ts";
+import { failedRowIds, pollSettlement } from "../settle.ts";
 import { err, ok, refPrice, toToolError, type Deps } from "./deps.ts";
 
 export function registerTakerTools(server: McpServer, deps: Deps): void {
@@ -77,7 +77,8 @@ export function registerTakerTools(server: McpServer, deps: Deps): void {
     "accept_quote",
     {
       title: "Accept a quote",
-      description: "Accept a maker's quote on your RFQ. Signs the settlement and blocks until it settles (or reports it is still settling).",
+      description:
+        "Accept a maker's quote on your RFQ. Signs your side of the settlement and waits for the outcome: the settled trade with its on-ledger proof, or the reason the desk failed it (nothing moves on a failure; the RFQ stays open).",
       inputSchema: { quoteId: z.string() },
     },
     async ({ quoteId }) => {
@@ -92,14 +93,22 @@ export function registerTakerTools(server: McpServer, deps: Deps): void {
         const rail = checkRails({ base: rfq.base, quote: rfq.quote, qty: rfq.qty, price: quote.price }, mid, cfg);
         if (!rail.ok) return err(`refused by rails: ${rail.reason}`);
 
-        const trade = await api.post<TradeDto>(`/quote/${encodeURIComponent(quoteId)}/accept`);
-        // The taker's allocations ride the sign queue; drain + sign them.
-        const pending = await api.get<{ actions: SignActionDto[] }>("/tx/pending");
-        await signer.run(pending.actions);
-
-        if (trade.status !== "settling") return ok(trade); // sync path already settled
-        const outcome = await pollSettlement(api, trade.tradeId, cfg.settleTimeoutMs, cfg.pollMs);
-        return ok(outcome.settled ? outcome.trade : { ...(outcome.trade ?? trade), note: "still settling — check list_trades" });
+        const priorFailures = await failedRowIds(api, rfq.rfqId);
+        const trade = await api.post<AcceptQuoteResponse>(`/quote/${encodeURIComponent(quoteId)}/accept`);
+        // The accept hands back the taker's allocations: sign them now. The wait
+        // re-drains /tx/pending, for one the desk could only queue a moment later.
+        await signer.run(trade.actions ?? []);
+        const drain = async (): Promise<void> => {
+          const pending = await api.get<{ actions: SignActionDto[] }>("/tx/pending");
+          await signer.run(pending.actions);
+        };
+        const outcome = await pollSettlement(
+          api, { tradeId: trade.tradeId, rfqId: rfq.rfqId, priorFailures }, cfg.settleTimeoutMs, cfg.pollMs, drain,
+        );
+        if (outcome.settled) return ok(outcome.trade);
+        if (outcome.failure !== undefined) return err(`settlement failed: ${outcome.failure} — nothing moved, the RFQ is still open`);
+        const { actions: _signed, ...settling } = trade;
+        return ok({ ...(outcome.trade ?? settling), note: "still settling — check list_trades" });
       } catch (e) {
         return toToolError(e);
       }
