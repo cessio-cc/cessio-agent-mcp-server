@@ -1,6 +1,6 @@
 {
   "name": "@cessio/agent-mcp-server",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "Local self-custody MCP server: an AI agent trades the Cessio RFQ desk as maker and taker.",
   "license": "MIT",
